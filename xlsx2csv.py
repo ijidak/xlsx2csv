@@ -175,6 +175,12 @@ class Xlsx2csv:
     """
 
     def __init__(self, xlsxfile, **options):
+
+        print("Xlsx2csv version: %s" % __version__)
+        print("Loading xlsx file: %s" % xlsxfile)
+        print("Options: %s" % options)
+        print("Parsing options...")
+
         options.setdefault("delimiter", ",")
         options.setdefault("quoting", csv.QUOTE_MINIMAL)
         options.setdefault("sheetdelimiter", "--------")
@@ -213,43 +219,65 @@ class Xlsx2csv:
             xlsxinputfile = xlsxfile
 
         try:
+            print("Opening xlsx file: %s. Extracting as zip file." % xlsxfile)
             self.ziphandle = zipfile.ZipFile(xlsxinputfile)
         except (zipfile.BadZipfile, IOError):
             raise InvalidXlsxFileException("Invalid xlsx file: " + str(xlsxfile))
 
 
+        print("Parsing xlsx file...")
         self.content_types = self._parse(ContentTypes, "/[Content_Types].xml")
         self.shared_strings = self._parse(SharedStrings, self.content_types.types["shared_strings"])
         self.styles = self._parse(Styles, self.content_types.types["styles"])
         self.workbook = self._parse(Workbook, self.content_types.types["workbook"])
+
         workbook_relationships = list(filter(lambda r: "book" in r, self.content_types.types["relationships"]))
         if len(workbook_relationships) > 0:
+            print ("Parsing workbook relationships...")
             self.workbook.relationships = self._parse(Relationships, workbook_relationships[0])
         else:
+            print("Workbook relationships not found")
             self.workbook.relationships = Relationships()
+
         if self.options['escape_strings']:
             self.shared_strings.escape_strings()
 
     def __del__(self):
         if self.ziphandle:
             # make sure to close zip file
+            print("Closing xlsx file...")
             self.ziphandle.close()
 
     def getSheetIdByName(self, name):
+        print("Searching for sheet %s" % name)
         for s in self.workbook.sheets:
             if s['name'] == name:
                 return s['index']
         return None
 
     def convert(self, outfile, sheetid=1, sheetname=None):
+        print("Converting xlsx file to csv...")
+        print("Output file: %s" % outfile)
+        print("Sheet ID: %s" % sheetid)
+        print("Sheet Name: %s" % sheetname)
+
         """outfile - path to file or filehandle"""
         if sheetname:
+            print("Sheet name is provided")
+            print("Converting sheet %s" % sheetname)
             sheetid = self.getSheetIdByName(sheetname)
             if not sheetid:
                 raise XlsxException("Sheet '%s' not found" % sheetname)
+            
         if sheetid > 0:
+            print("Sheet ID is provided. This may be because you did not provide a specific sheet name or ID. The default is SheetID=1. If you want to parse ALL sheets, provide SheetID=0.")
+            print("Parsing single sheet.")
+            print("Converting sheet %s..." % sheetid)
+            
             self._convert(sheetid, outfile)
         else:
+            print("Sheet ID is 0. This means that all sheets will be parsed.")
+            print("Converting all sheets...")
             if isinstance(outfile, str):
                 if not os.path.exists(outfile):
                     os.makedirs(outfile)
@@ -260,8 +288,14 @@ class Xlsx2csv:
                     raise OutFileAlreadyExistsException("File " + str(outfile) + " already exists!")
                 outfile = outfile.open("w+", encoding=self.options['outputencoding'], newline="")
 
+            print("Starting for loop to convert all sheets...")
+            print("Output delimiter: %s" % self.options['delimiter'])
+
             for s in self.workbook.sheets:
                 sheetname = s['name']
+
+                print("Converting sheet %s" % sheetname)
+
                 sheetstate = s['state']
 
                 # filter hidden sheets
